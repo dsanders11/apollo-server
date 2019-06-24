@@ -1,21 +1,14 @@
-import {
-  APIGatewayProxyCallback,
-  APIGatewayProxyEvent,
-  Context as LambdaContext,
-} from 'aws-lambda';
-import { ApolloServerBase } from 'apollo-server-core';
-import { GraphQLOptions, Config } from 'apollo-server-core';
-import {
-  renderPlaygroundPage,
-  RenderPageOptions as PlaygroundRenderPageOptions,
-} from '@apollographql/graphql-playground-html';
+import {RenderPageOptions as PlaygroundRenderPageOptions, renderPlaygroundPage,} from '@apollographql/graphql-playground-html';
+import {ApolloServerBase} from 'apollo-server-core';
+import {Config, GraphQLOptions} from 'apollo-server-core';
+import {Headers} from 'apollo-server-env';
+import {APIGatewayProxyCallback, APIGatewayProxyEvent, Context as LambdaContext,} from 'aws-lambda';
 
-import { graphqlLambda } from './lambdaApollo';
-import { Headers } from 'apollo-server-env';
+import {graphqlLambda, graphqlLambdaAsync} from './lambdaApollo';
 
 export interface CreateHandlerOptions {
   cors?: {
-    origin?: boolean | string | string[];
+    origin?: boolean|string|string[];
     methods?: string | string[];
     allowedHeaders?: string | string[];
     exposedHeaders?: string | string[];
@@ -42,13 +35,13 @@ export class ApolloServer extends ApolloServerBase {
   // provides typings for the integration specific behavior, ideally this would
   // be propagated with a generic to the super class
   createGraphQLServerOptions(
-    event: APIGatewayProxyEvent,
-    context: LambdaContext,
-  ): Promise<GraphQLOptions> {
-    return super.graphQLServerOptions({ event, context });
+      event: APIGatewayProxyEvent,
+      context: LambdaContext,
+      ): Promise<GraphQLOptions> {
+    return super.graphQLServerOptions({event, context});
   }
 
-  public createHandler({ cors }: CreateHandlerOptions = { cors: undefined }) {
+  public createHandler({cors}: CreateHandlerOptions = {cors: undefined}) {
     // We will kick off the `willStart` event once for the server, and then
     // await it before processing any requests by incorporating its `await` into
     // the GraphQLServerOptions function which is called before each request.
@@ -62,8 +55,8 @@ export class ApolloServer extends ApolloServerBase {
           corsHeaders.set('access-control-allow-methods', cors.methods);
         } else if (Array.isArray(cors.methods)) {
           corsHeaders.set(
-            'access-control-allow-methods',
-            cors.methods.join(','),
+              'access-control-allow-methods',
+              cors.methods.join(','),
           );
         }
       }
@@ -73,8 +66,8 @@ export class ApolloServer extends ApolloServerBase {
           corsHeaders.set('access-control-allow-headers', cors.allowedHeaders);
         } else if (Array.isArray(cors.allowedHeaders)) {
           corsHeaders.set(
-            'access-control-allow-headers',
-            cors.allowedHeaders.join(','),
+              'access-control-allow-headers',
+              cors.allowedHeaders.join(','),
           );
         }
       }
@@ -84,8 +77,8 @@ export class ApolloServer extends ApolloServerBase {
           corsHeaders.set('access-control-expose-headers', cors.exposedHeaders);
         } else if (Array.isArray(cors.exposedHeaders)) {
           corsHeaders.set(
-            'access-control-expose-headers',
-            cors.exposedHeaders.join(','),
+              'access-control-expose-headers',
+              cors.exposedHeaders.join(','),
           );
         }
       }
@@ -99,10 +92,10 @@ export class ApolloServer extends ApolloServerBase {
     }
 
     return (
-      event: APIGatewayProxyEvent,
-      context: LambdaContext,
-      callback: APIGatewayProxyCallback,
-    ) => {
+               event: APIGatewayProxyEvent,
+               context: LambdaContext,
+               callback: APIGatewayProxyCallback,
+               ) => {
       // We re-load the headers into a Fetch API-compatible `Headers`
       // interface within `graphqlLambda`, but we still need to respect the
       // case-insensitivity within this logic here, so we'll need to do it
@@ -118,36 +111,35 @@ export class ApolloServer extends ApolloServerBase {
         if (typeof cors.origin === 'string') {
           requestCorsHeaders.set('access-control-allow-origin', cors.origin);
         } else if (
-          requestOrigin &&
-          (typeof cors.origin === 'boolean' ||
-            (Array.isArray(cors.origin) &&
-              requestOrigin &&
-              cors.origin.includes(requestOrigin)))
-        ) {
+            requestOrigin &&
+            (typeof cors.origin === 'boolean' ||
+             (Array.isArray(cors.origin) && requestOrigin &&
+              cors.origin.includes(requestOrigin)))) {
           requestCorsHeaders.set('access-control-allow-origin', requestOrigin);
         }
 
         const requestAccessControlRequestHeaders = eventHeaders.get(
-          'access-control-request-headers',
+            'access-control-request-headers',
         );
         if (!cors.allowedHeaders && requestAccessControlRequestHeaders) {
           requestCorsHeaders.set(
-            'access-control-allow-headers',
-            requestAccessControlRequestHeaders,
+              'access-control-allow-headers',
+              requestAccessControlRequestHeaders,
           );
         }
       }
 
       // Convert the `Headers` into an object which can be spread into the
       // various headers objects below.
-      // Note: while Object.fromEntries simplifies this code, it's only currently
+      // Note: while Object.fromEntries simplifies this code, it's only
+      // currently
       //       supported in Node 12 (we support >=6)
-      const requestCorsHeadersObject = Array.from(requestCorsHeaders).reduce<
-        Record<string, string>
-      >((headersObject, [key, value]) => {
-        headersObject[key] = value;
-        return headersObject;
-      }, {});
+      const requestCorsHeadersObject =
+          Array.from(requestCorsHeaders)
+              .reduce<Record<string, string>>((headersObject, [key, value]) => {
+                headersObject[key] = value;
+                return headersObject;
+              }, {});
 
       if (event.httpMethod === 'OPTIONS') {
         context.callbackWaitsForEmptyEventLoop = false;
@@ -163,10 +155,8 @@ export class ApolloServer extends ApolloServerBase {
       if (this.playgroundOptions && event.httpMethod === 'GET') {
         const acceptHeader = event.headers['Accept'] || event.headers['accept'];
         if (acceptHeader && acceptHeader.includes('text/html')) {
-          const path =
-            event.path ||
-            (event.requestContext && event.requestContext.path) ||
-            '/';
+          const path = event.path ||
+              (event.requestContext && event.requestContext.path) || '/';
 
           const playgroundRenderPageOptions: PlaygroundRenderPageOptions = {
             endpoint: path,
@@ -186,14 +176,14 @@ export class ApolloServer extends ApolloServerBase {
 
       const callbackFilter: APIGatewayProxyCallback = (error, result) => {
         callback(
-          error,
-          result && {
-            ...result,
-            headers: {
-              ...result.headers,
-              ...requestCorsHeadersObject,
+            error,
+            result && {
+              ...result,
+              headers: {
+                ...result.headers,
+                ...requestCorsHeadersObject,
+              },
             },
-          },
         );
       };
 
@@ -208,6 +198,146 @@ export class ApolloServer extends ApolloServerBase {
         await promiseWillStart;
         return this.createGraphQLServerOptions(event, context);
       })(event, context, callbackFilter);
+    };
+  }
+
+  public createAsyncHandler({cors}: CreateHandlerOptions = {cors: undefined}) {
+    const corsHeaders = new Headers();
+
+    if (cors) {
+      if (cors.methods) {
+        if (typeof cors.methods === 'string') {
+          corsHeaders.set('access-control-allow-methods', cors.methods);
+        } else if (Array.isArray(cors.methods)) {
+          corsHeaders.set(
+              'access-control-allow-methods',
+              cors.methods.join(','),
+          );
+        }
+      }
+
+      if (cors.allowedHeaders) {
+        if (typeof cors.allowedHeaders === 'string') {
+          corsHeaders.set('access-control-allow-headers', cors.allowedHeaders);
+        } else if (Array.isArray(cors.allowedHeaders)) {
+          corsHeaders.set(
+              'access-control-allow-headers',
+              cors.allowedHeaders.join(','),
+          );
+        }
+      }
+
+      if (cors.exposedHeaders) {
+        if (typeof cors.exposedHeaders === 'string') {
+          corsHeaders.set('access-control-expose-headers', cors.exposedHeaders);
+        } else if (Array.isArray(cors.exposedHeaders)) {
+          corsHeaders.set(
+              'access-control-expose-headers',
+              cors.exposedHeaders.join(','),
+          );
+        }
+      }
+
+      if (cors.credentials) {
+        corsHeaders.set('access-control-allow-credentials', 'true');
+      }
+      if (typeof cors.maxAge === 'number') {
+        corsHeaders.set('access-control-max-age', cors.maxAge.toString());
+      }
+    }
+
+    return async (event: APIGatewayProxyEvent, context: LambdaContext) => {
+      await this.willStart()
+
+      // We re-load the headers into a Fetch API-compatible `Headers`
+      // interface within `graphqlLambda`, but we still need to respect the
+      // case-insensitivity within this logic here, so we'll need to do it
+      // twice since it's not accessible to us otherwise, right now.
+      const eventHeaders = new Headers(event.headers);
+
+      // Make a request-specific copy of the CORS headers, based on the server
+      // global CORS headers we've set above.
+      const requestCorsHeaders = new Headers(corsHeaders);
+
+      if (cors && cors.origin) {
+        const requestOrigin = eventHeaders.get('origin');
+        if (typeof cors.origin === 'string') {
+          requestCorsHeaders.set('access-control-allow-origin', cors.origin);
+        } else if (
+            requestOrigin &&
+            (typeof cors.origin === 'boolean' ||
+             (Array.isArray(cors.origin) && requestOrigin &&
+              cors.origin.includes(requestOrigin)))) {
+          requestCorsHeaders.set('access-control-allow-origin', requestOrigin);
+        }
+
+        const requestAccessControlRequestHeaders = eventHeaders.get(
+            'access-control-request-headers',
+        );
+        if (!cors.allowedHeaders && requestAccessControlRequestHeaders) {
+          requestCorsHeaders.set(
+              'access-control-allow-headers',
+              requestAccessControlRequestHeaders,
+          );
+        }
+      }
+
+      // Convert the `Headers` into an object which can be spread into the
+      // various headers objects below.
+      // Note: while Object.fromEntries simplifies this code, it's only
+      // currently
+      //       supported in Node 12 (we support >=6)
+      const requestCorsHeadersObject =
+          Array.from(requestCorsHeaders)
+              .reduce<Record<string, string>>((headersObject, [key, value]) => {
+                headersObject[key] = value;
+                return headersObject;
+              }, {});
+
+      if (event.httpMethod === 'OPTIONS') {
+        return {
+          body: '',
+          statusCode: 204,
+          headers: {
+            ...requestCorsHeadersObject,
+          },
+        };
+      }
+
+      if (this.playgroundOptions && event.httpMethod === 'GET') {
+        const acceptHeader = event.headers['Accept'] || event.headers['accept'];
+        if (acceptHeader && acceptHeader.includes('text/html')) {
+          const path = event.path ||
+              (event.requestContext && event.requestContext.path) || '/';
+
+          const playgroundRenderPageOptions: PlaygroundRenderPageOptions = {
+            endpoint: path,
+            ...this.playgroundOptions,
+          };
+
+          return {
+            body: renderPlaygroundPage(playgroundRenderPageOptions),
+            statusCode: 200,
+            headers: {
+              'Content-Type': 'text/html',
+              ...requestCorsHeadersObject,
+            },
+          };
+        }
+      }
+
+      const graphQLServerOptions =
+          await this.createGraphQLServerOptions(event, context);
+      const result = await graphqlLambdaAsync(graphQLServerOptions)(
+          event, context, () => {});
+
+      return result && {
+        ...result,
+        headers: {
+          ...result.headers,
+          ...requestCorsHeadersObject,
+        },
+      };
     };
   }
 }
