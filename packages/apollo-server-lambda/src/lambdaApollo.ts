@@ -36,20 +36,36 @@ export function graphqlLambda(
       };
     }
 
+    const headers = new Headers(event.headers);
+    const contentType = headers.get('content-type');
+
+    let query: any = event.queryStringParameters;
+    if (event.httpMethod === 'POST' && event.body) {
+      query = event.body;
+
+      if (contentType && contentType.startsWith('application/json')) {
+        try {
+          query = JSON.parse(event.body);
+        } catch (error) {
+          return {
+            body: 'Error parsing JSON POST body',
+            statusCode: 415,
+          };
+        }
+      }
+    }
+
     try {
       const { graphqlResponse, responseInit } = await runHttpQuery(
         [event, context],
         {
           method: event.httpMethod,
           options: options,
-          query:
-            event.httpMethod === 'POST' && event.body
-              ? JSON.parse(event.body)
-              : event.queryStringParameters,
+          query: query,
           request: {
             url: event.path,
             method: event.httpMethod,
-            headers: new Headers(event.headers),
+            headers: headers,
           },
         },
       );

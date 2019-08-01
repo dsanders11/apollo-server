@@ -3,11 +3,19 @@ import {
   APIGatewayProxyEvent,
   Context as LambdaContext,
 } from 'aws-lambda';
-import { ApolloServerBase, GraphQLOptions, Config } from 'apollo-server-core';
+import {
+  ApolloServerBase,
+  GraphQLOptions,
+  Config,
+  FileUploadOptions,
+  formatApolloErrors,
+  processFileUploads,
+} from 'apollo-server-core';
 import {
   renderPlaygroundPage,
   RenderPageOptions as PlaygroundRenderPageOptions,
 } from '@apollographql/graphql-playground-html';
+import stream from 'stream';
 
 import { graphqlLambda } from './lambdaApollo';
 import { Headers } from 'apollo-server-env';
@@ -22,6 +30,7 @@ export interface CreateHandlerOptions {
     maxAge?: number;
   };
   async?: boolean;
+  uploadsConfig?: FileUploadOptions;
 }
 
 export class ApolloServer extends ApolloServerBase {
@@ -49,7 +58,11 @@ export class ApolloServer extends ApolloServerBase {
   }
 
   public createHandler(
-    { cors, async }: CreateHandlerOptions = { cors: undefined, async: false },
+    { cors, async, uploadsConfig }: CreateHandlerOptions = {
+      cors: undefined,
+      async: false,
+      uploadsConfig: undefined,
+    },
   ) {
     // We will kick off the `willStart` event once for the server, and then
     // await it before processing any requests by incorporating its `await` into
@@ -204,8 +217,29 @@ export class ApolloServer extends ApolloServerBase {
       }
 
       const resultPromise = promiseWillStart.then(async () => {
+        // TODO - This should be replaced with something which can have the
+        // 'finish'/'close' event emit, since `graphql-upload` uses that in
+        // order to release resources
+        const response = new stream.Writable() as any;
+
+        try {
+          event.body = await this.handleFileUploads(
+            event,
+            eventHeaders,
+            response,
+            uploadsConfig || {},
+          ) as any;
+        } catch (error) {
+          throw formatApolloErrors([error], {
+            formatter: this.requestOptions.formatError,
+            debug: this.requestOptions.debug,
+          });
+        }
+
         const options = await this.createGraphQLServerOptions(event, context);
         const result = await graphqlLambda(options)(event, context);
+
+        // TODO - Close response here so resources are released
 
         return (
           result && {
@@ -230,5 +264,39 @@ export class ApolloServer extends ApolloServerBase {
           });
       }
     };
+  }
+
+  // This integration supports file uploads.
+  protected supportsUploads(): boolean {
+    return true;
+  }
+
+  // If file uploads are detected, prepare them for easier handling with
+  // the help of `graphql-upload`.
+  private async handleFileUploads(
+    event: APIGatewayProxyEvent,
+    headers: Headers,
+    response: any,
+    uploadsConfig: FileUploadOptions,
+  ) {
+    if (typeof processFileUploads !== 'function' || event.body === null) {
+      return event.body;
+    }
+
+    const contentType = headers.get('content-type');
+
+    if (contentType && contentType.startsWith('multipart/form-data')) {
+      const request = new stream.Readable() as any;
+      request.push(
+        Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'ascii'),
+      );
+      request.push(null);
+      request.headers = event.headers;
+      request.headers['content-type'] = contentType;
+
+      return processFileUploads(request, response, uploadsConfig);
+    }
+
+    return event.body;
   }
 }
